@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import traceback
-from typing import List
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QTextCursor
@@ -331,7 +330,7 @@ class MainWindow(QMainWindow):
     # Execução AUTO (autotune)
     # ------------------------------------------------------------------
 
-    def _parse_int_list(self, raw: str) -> List[int]:
+    def _parse_int_list(self, raw: str) -> list[int]:
         vals = []
         for chunk in raw.split(","):
             chunk = chunk.strip()
@@ -339,7 +338,7 @@ class MainWindow(QMainWindow):
                 vals.append(int(chunk))
         return vals
 
-    def _parse_float_list(self, raw: str) -> List[float]:
+    def _parse_float_list(self, raw: str) -> list[float]:
         vals = []
         for chunk in raw.split(","):
             chunk = chunk.strip()

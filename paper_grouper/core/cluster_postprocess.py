@@ -27,7 +27,7 @@ def _merge_tiny_clusters(
     article_to_cluster: Dict[str, int], G: nx.Graph, min_size: int
 ) -> Dict[str, int]:
     clusters = _invert_partition(article_to_cluster)
-    tiny = {cid for cid, members in clusters.items() if len(members) < min_size}
+    tiny = {_cid for _cid, members in clusters.items() if len(members) < min_size}
     if not tiny:
         return article_to_cluster
     new_assign = dict(article_to_cluster)
@@ -52,7 +52,7 @@ def _compute_centrality(
     G: nx.Graph, clusters: Dict[int, List[str]]
 ) -> Dict[str, float]:
     centrality: Dict[str, float] = {}
-    for cid, members in clusters.items():
+    for _cid, members in clusters.items():
         member_set = set(members)
         for m in members:
             score = 0.0
@@ -127,7 +127,7 @@ def finalize_clustering(
 
     by_id = {a.id: a for a in articles}
     cluster_labels = {
-        cid: _label_cluster(cid, members, by_id) for cid, members in clusters.items()
+        _cid: _label_cluster(_cid, members, by_id) for _cid, members in clusters.items()
     }
 
     centrality = _compute_centrality(G, clusters)

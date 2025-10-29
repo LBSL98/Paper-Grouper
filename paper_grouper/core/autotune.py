@@ -72,7 +72,7 @@ def run_autotune(
     best_config, best_cr, best_summary = best
 
     trials: List[AutoTuneTrialResult] = []
-    for cfg, cr, summary in results:
+    for cfg, _cr, summary in results:
         trials.append(
             AutoTuneTrialResult(
                 params=cfg,
