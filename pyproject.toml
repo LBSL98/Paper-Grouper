@@ -1,46 +1,40 @@
 [tool.poetry]
-name = "paper_grouper"
+name = "paper-grouper"
 version = "0.1.0"
-description = "Automatic literature clustering, organization, and visualization tool with GUI and autotuning."
-authors = ["Leonardo Brunno Sink Lopes brunnosink2@gmail.com"]
+description = "Interactive GUI to cluster and organize PDFs by topic"
+authors = ["Matheus Augusto de Paula Oliveira <you@example.com>"]
 readme = "README.md"
-packages = [
-    { include = "paper_grouper" }
-]
+packages = [{ include = "paper_grouper" }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14"
 pyside6 = "^6.7.0"
-matplotlib = "^3.9.0"
+sentence-transformers = "^3.4.1"
+scikit-learn = "^1.7.2"
 networkx = "^3.3"
 python-louvain = "^0.16"
-sentence-transformers = "^3.0.0"
-numpy = "^2.1.0"
-scikit-learn = "^1.5.0"
-pypdf = "^5.0.0"
-python-slugify = "^8.0.0"
-
-# igraph + leidenalg can be added later (optional; some distros need apt libs)
-# python-igraph = "^0.11.5"
-# leidenalg = "^0.10.2"
+matplotlib = "^3.10.7"
+pypdf = "^5.9.0"
+python-slugify = "^8.0.4"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3.0"
-black = "^24.8.0"
-ruff = "^0.6.0"
-mypy = "^1.11.0"
-types-setuptools = "^75.0.0.20240917"
-pre-commit = "^4.3.0"
+pytest = "^8.4.2"
+black = "^24.10.0"
+ruff = "^0.6.9"
+mypy = "^1.18.2"
+pre-commit = "^4.0.1"
+types-setuptools = "^75.8.2.20250305"
 
-[tool.black]
-line-length = 88
-target-version = ['py311']
+[tool.ruff]
+line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-warn_unused_configs = true
+[tool.pytest.ini_options]
+addopts = "-q"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
