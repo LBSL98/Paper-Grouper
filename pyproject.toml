@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "paper_grouper"
+version = "0.1.0"
+description = "Automatic literature clustering, organization, and visualization tool with GUI and autotuning."
+authors = ["Leonardo Brunno Sink Lopes brunnosink2@gmail.com"]
+readme = "README.md"
+packages = [
+    { include = "paper_grouper" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"
+pyside6 = "^6.7.0"
+matplotlib = "^3.9.0"
+networkx = "^3.3"
+python-louvain = "^0.16"
+sentence-transformers = "^3.0.0"
+numpy = "^2.1.0"
+scikit-learn = "^1.5.0"
+pypdf = "^5.0.0"
+python-slugify = "^8.0.0"
+
+# igraph + leidenalg can be added later (optional; some distros need apt libs)
+# python-igraph = "^0.11.5"
+# leidenalg = "^0.10.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+black = "^24.8.0"
+ruff = "^0.6.0"
+mypy = "^1.11.0"
+types-setuptools = "^75.0.0.20240917"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 88
+select = ["E","F","I","B","UP","SIM","ARG"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true

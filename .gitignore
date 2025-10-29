@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.dist/
+.build/
+.eggs/
+.env
+.venv
+venv/
+.envrc
+.poetry/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.dmypy.json
+.dmypy.json.*/
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*.code-workspace
+
+# Local outputs
+output/
+*.png
+
+# Poetry
+poetry.lock
