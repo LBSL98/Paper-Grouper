@@ -4,8 +4,9 @@ Right now it's a placeholder heuristic, later we'll parse PDF text
 and/or use .bib.
 """
 
-from typing import List
 from pathlib import Path
+from typing import List
+
 from .data import ArticleRecord
 
 

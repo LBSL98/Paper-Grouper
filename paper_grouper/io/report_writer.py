@@ -1,13 +1,16 @@
+import json
 from pathlib import Path
 from typing import Dict, List, Optional
-import json
-from paper_grouper.core.data import ArticleRecord, ClusteringResult, AutoTuneTrialResult
+
+from paper_grouper.core.data import ArticleRecord, AutoTuneTrialResult, ClusteringResult
 
 
-def write_reports(output_root: Path,
-                  clustering: ClusteringResult,
-                  articles: Dict[str, ArticleRecord],
-                  trials_info: Optional[List[AutoTuneTrialResult]] = None) -> None:
+def write_reports(
+    output_root: Path,
+    clustering: ClusteringResult,
+    articles: Dict[str, ArticleRecord],
+    trials_info: Optional[List[AutoTuneTrialResult]] = None,
+) -> None:
 
     # JSON
     json_path = output_root / "clusters_summary.json"
@@ -25,12 +28,14 @@ def write_reports(output_root: Path,
         }
         for art_id in members:
             a = articles[art_id]
-            cinfo["papers"].append({
-                "id": a.id,
-                "title": a.title,
-                "year": a.year,
-                "abstract_snippet": a.abstract[:400],
-            })
+            cinfo["papers"].append(
+                {
+                    "id": a.id,
+                    "title": a.title,
+                    "year": a.year,
+                    "abstract_snippet": a.abstract[:400],
+                }
+            )
         data["clusters"].append(cinfo)
 
     if trials_info:

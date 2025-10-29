@@ -3,6 +3,7 @@ Community detection using Louvain.
 """
 
 from typing import Dict
+
 import networkx as nx
 from community import community_louvain  # python-louvain
 

@@ -2,10 +2,10 @@
 Build k-NN similarity graph using cosine similarity of embeddings.
 """
 
-from typing import Tuple
-import numpy as np
 import networkx as nx
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+
 from .data import EmbeddingResult
 
 

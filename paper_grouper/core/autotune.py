@@ -1,23 +1,25 @@
-import itertools
 import concurrent.futures
-from typing import List, Dict, Tuple
+import itertools
+from typing import Dict, List, Tuple
+
+from .cluster_postprocess import finalize_clustering
+from .community_detector import detect_communities_louvain
 from .data import (
     ArticleRecord,
-    EmbeddingResult,
-    ClusteringResult,
     AutoTuneTrialResult,
+    ClusteringResult,
+    EmbeddingResult,
 )
 from .graph_builder import build_knn_graph
-from .community_detector import detect_communities_louvain
-from .cluster_postprocess import finalize_clustering
 from .scoring import summarize_for_autotune
 
 
-def _evaluate_single_config(config: Dict[str, float],
-                            articles: List[ArticleRecord],
-                            emb: EmbeddingResult,
-                            alpha_beta_gamma=(1.0, 0.5, 0.5)
-                            ) -> Tuple[Dict[str, float], ClusteringResult, Dict[str, float]]:
+def _evaluate_single_config(
+    config: Dict[str, float],
+    articles: List[ArticleRecord],
+    emb: EmbeddingResult,
+    alpha_beta_gamma=(1.0, 0.5, 0.5),
+) -> Tuple[Dict[str, float], ClusteringResult, Dict[str, float]]:
     k = int(config["k"])
     resolution = float(config["resolution"])
     min_cluster = int(config["min_cluster_size"])
@@ -39,26 +41,30 @@ def _evaluate_single_config(config: Dict[str, float],
     return (config, cr, summary)
 
 
-def run_autotune(articles: List[ArticleRecord],
-                 emb: EmbeddingResult,
-                 k_values: List[int],
-                 resolutions: List[float],
-                 min_cluster_sizes: List[int],
-                 max_workers: int = 4
-                 ) -> Tuple[ClusteringResult, Dict[str, float], List[AutoTuneTrialResult]]:
+def run_autotune(
+    articles: List[ArticleRecord],
+    emb: EmbeddingResult,
+    k_values: List[int],
+    resolutions: List[float],
+    min_cluster_sizes: List[int],
+    max_workers: int = 4,
+) -> Tuple[ClusteringResult, Dict[str, float], List[AutoTuneTrialResult]]:
 
     configs = []
     for k, r, m in itertools.product(k_values, resolutions, min_cluster_sizes):
-        configs.append({
-            "k": k,
-            "resolution": r,
-            "min_cluster_size": m,
-        })
+        configs.append(
+            {
+                "k": k,
+                "resolution": r,
+                "min_cluster_size": m,
+            }
+        )
 
     results = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as pool:
-        futs = [pool.submit(_evaluate_single_config, cfg, articles, emb)
-                for cfg in configs]
+        futs = [
+            pool.submit(_evaluate_single_config, cfg, articles, emb) for cfg in configs
+        ]
         for fut in concurrent.futures.as_completed(futs):
             results.append(fut.result())
 

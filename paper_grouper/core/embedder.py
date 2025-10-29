@@ -14,10 +14,12 @@ pode ficar pesado e travar a janela. Então oferecemos dois modos:
 O controller pode chamar um ou outro.
 """
 
-from typing import List
-import numpy as np
-from .data import ArticleRecord, EmbeddingResult
 import hashlib
+from typing import List
+
+import numpy as np
+
+from .data import ArticleRecord, EmbeddingResult
 
 
 def _text_to_vec_hash(text: str, dim: int = 64) -> np.ndarray:
@@ -41,7 +43,9 @@ def _text_to_vec_hash(text: str, dim: int = 64) -> np.ndarray:
     return vec
 
 
-def embed_articles_light(articles: List[ArticleRecord], dim: int = 64) -> EmbeddingResult:
+def embed_articles_light(
+    articles: List[ArticleRecord], dim: int = 64
+) -> EmbeddingResult:
     """
     Modo leve (sem torch). Útil para desenvolvimento rápido.
     """
@@ -62,6 +66,7 @@ def embed_articles_light(articles: List[ArticleRecord], dim: int = 64) -> Embedd
 
 _model_cache = None
 
+
 def _get_model():
     """
     Carrega sentence-transformers (usa torch). Só chamamos isso
@@ -70,6 +75,7 @@ def _get_model():
     global _model_cache
     if _model_cache is None:
         from sentence_transformers import SentenceTransformer
+
         # modelo pequeno mas ainda usa torch
         _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
     return _model_cache

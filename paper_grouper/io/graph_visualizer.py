@@ -1,13 +1,17 @@
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import networkx as nx
+
 from paper_grouper.core.data import ClusteringResult
 
 
-def render_graph_png(G: nx.Graph,
-                     clustering: ClusteringResult,
-                     output_root: Path,
-                     filename: str = "graph_overview.png") -> Path:
+def render_graph_png(
+    G: nx.Graph,
+    clustering: ClusteringResult,
+    output_root: Path,
+    filename: str = "graph_overview.png",
+) -> Path:
 
     color_map = []
     sizes = []

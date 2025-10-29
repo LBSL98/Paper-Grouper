@@ -7,10 +7,12 @@ Post-process partition:
 - score final solution
 """
 
-from typing import Dict, List
-import networkx as nx
 from collections import Counter, defaultdict
+from typing import Dict, List
+
+import networkx as nx
 from community import community_louvain
+
 from .data import ArticleRecord, ClusteringResult
 
 
@@ -21,9 +23,9 @@ def _invert_partition(article_to_cluster: Dict[str, int]) -> Dict[int, List[str]
     return clusters
 
 
-def _merge_tiny_clusters(article_to_cluster: Dict[str, int],
-                         G: nx.Graph,
-                         min_size: int) -> Dict[str, int]:
+def _merge_tiny_clusters(
+    article_to_cluster: Dict[str, int], G: nx.Graph, min_size: int
+) -> Dict[str, int]:
     clusters = _invert_partition(article_to_cluster)
     tiny = {cid for cid, members in clusters.items() if len(members) < min_size}
     if not tiny:
@@ -46,8 +48,9 @@ def _merge_tiny_clusters(article_to_cluster: Dict[str, int],
     return new_assign
 
 
-def _compute_centrality(G: nx.Graph,
-                        clusters: Dict[int, List[str]]) -> Dict[str, float]:
+def _compute_centrality(
+    G: nx.Graph, clusters: Dict[int, List[str]]
+) -> Dict[str, float]:
     centrality: Dict[str, float] = {}
     for cid, members in clusters.items():
         member_set = set(members)
@@ -60,22 +63,35 @@ def _compute_centrality(G: nx.Graph,
     return centrality
 
 
-def _label_cluster(cid: int,
-                   members: List[str],
-                   by_id: Dict[str, ArticleRecord]) -> str:
+def _label_cluster(
+    cid: int, members: List[str], by_id: Dict[str, ArticleRecord]
+) -> str:
     bag = []
     for art_id in members:
         a = by_id[art_id]
         bag.extend(a.title.lower().split())
         bag.extend(a.abstract.lower().split())
     stop = {
-        "the","a","an","and","of","for","to","in","on","with","using",
-        "um","uma","de","da","do","para","em"
+        "the",
+        "a",
+        "an",
+        "and",
+        "of",
+        "for",
+        "to",
+        "in",
+        "on",
+        "with",
+        "using",
+        "um",
+        "uma",
+        "de",
+        "da",
+        "do",
+        "para",
+        "em",
     }
-    bag = [
-        w.strip(".,:;()[]") for w in bag
-        if w.lower() not in stop and len(w) > 2
-    ]
+    bag = [w.strip(".,:;()[]") for w in bag if w.lower() not in stop and len(w) > 2]
     common = [w for (w, _) in Counter(bag).most_common(4)]
     return " / ".join(common) if common else f"cluster_{cid}"
 
@@ -90,13 +106,15 @@ def _small_frac(clusters: Dict[int, List[str]], min_size: int) -> float:
     return tiny_count / max(1, len(clusters))
 
 
-def finalize_clustering(raw_article_to_cluster: Dict[str, int],
-                        G: nx.Graph,
-                        articles: List[ArticleRecord],
-                        min_cluster_size: int,
-                        alpha: float,
-                        beta: float,
-                        gamma: float) -> ClusteringResult:
+def finalize_clustering(
+    raw_article_to_cluster: Dict[str, int],
+    G: nx.Graph,
+    articles: List[ArticleRecord],
+    min_cluster_size: int,
+    alpha: float,
+    beta: float,
+    gamma: float,
+) -> ClusteringResult:
 
     reassigned = _merge_tiny_clusters(raw_article_to_cluster, G, min_cluster_size)
     clusters = _invert_partition(reassigned)
@@ -109,8 +127,7 @@ def finalize_clustering(raw_article_to_cluster: Dict[str, int],
 
     by_id = {a.id: a for a in articles}
     cluster_labels = {
-        cid: _label_cluster(cid, members, by_id)
-        for cid, members in clusters.items()
+        cid: _label_cluster(cid, members, by_id) for cid, members in clusters.items()
     }
 
     centrality = _compute_centrality(G, clusters)

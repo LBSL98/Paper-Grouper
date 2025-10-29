@@ -1,5 +1,6 @@
 from .data import ClusteringResult
 
+
 def summarize_for_autotune(cr: ClusteringResult) -> dict:
     total = sum(len(v) for v in cr.clusters.values())
     max_cluster = max(len(v) for v in cr.clusters.values())

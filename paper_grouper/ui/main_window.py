@@ -7,23 +7,23 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QWidget,
+    QCheckBox,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QCheckBox,
+    QMainWindow,
     QPushButton,
-    QTextEdit,
-    QTabWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QGroupBox,
-    QFormLayout,
-    QSpinBox,
-    QDoubleSpinBox,
     QScrollArea,
+    QSpinBox,
     QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from paper_grouper import app_controller
@@ -183,9 +183,7 @@ class MainWindow(QMainWindow):
         auto_form_layout.addRow(
             "Lista de k (separado por vírgula):", self.k_values_edit
         )
-        auto_form_layout.addRow(
-            "Lista de resoluções Louvain:", self.resolutions_edit
-        )
+        auto_form_layout.addRow("Lista de resoluções Louvain:", self.resolutions_edit)
         auto_form_layout.addRow(
             "Lista de tamanhos mínimos de cluster:", self.min_cluster_values_edit
         )
@@ -423,7 +421,7 @@ class MainWindow(QMainWindow):
                 f"  min_cluster_size = {best_cfg.get('min_cluster_size')}"
             )
 
-        clustering = result_dict.get("clustering", None)
+        clustering = result_dict.get("clustering")
         articles_by_id = result_dict.get("articles", {})
 
         if clustering:

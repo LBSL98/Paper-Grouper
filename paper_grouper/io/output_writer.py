@@ -1,7 +1,9 @@
+import shutil
 from pathlib import Path
 from typing import Dict
-import shutil
+
 from slugify import slugify
+
 from paper_grouper.core.data import ArticleRecord, ClusteringResult
 
 
@@ -29,10 +31,12 @@ def prepare_output_dir(input_dir: str, desired_out: str | None = None) -> Path:
     return out_root
 
 
-def write_clustered_files(output_root: Path,
-                          clustering: ClusteringResult,
-                          articles: Dict[str, ArticleRecord],
-                          rename_with_title: bool) -> None:
+def write_clustered_files(
+    output_root: Path,
+    clustering: ClusteringResult,
+    articles: Dict[str, ArticleRecord],
+    rename_with_title: bool,
+) -> None:
     for cid, members in clustering.clusters.items():
         label = clustering.cluster_labels.get(cid, f"cluster_{cid}")
         sub = output_root / f"{cid:02d}_{slugify(label)[:40]}"

@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import List
 
+
 def list_pdfs(folder: str) -> List[str]:
     p = Path(folder)
     return [

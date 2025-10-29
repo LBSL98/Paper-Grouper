@@ -3,28 +3,29 @@ Controller for both Manual and Auto modes.
 The GUI should call here, not core/io directly.
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from paper_grouper.io.file_scanner import list_pdfs
-from paper_grouper.core.metadata_extractor import batch_extract
-from paper_grouper.core.embedder import embed_articles_light, embed_articles_model
-from paper_grouper.core.graph_builder import build_knn_graph
-from paper_grouper.core.community_detector import detect_communities_louvain
-from paper_grouper.core.cluster_postprocess import finalize_clustering
+from typing import Any, Dict, List, Optional
+
 from paper_grouper.core.autotune import run_autotune
+from paper_grouper.core.cluster_postprocess import finalize_clustering
+from paper_grouper.core.community_detector import detect_communities_louvain
+from paper_grouper.core.embedder import embed_articles_light
+from paper_grouper.core.graph_builder import build_knn_graph
+from paper_grouper.core.metadata_extractor import batch_extract
 from paper_grouper.core.scoring import summarize_for_autotune
+from paper_grouper.io.file_scanner import list_pdfs
+from paper_grouper.io.graph_visualizer import render_graph_png
 from paper_grouper.io.output_writer import prepare_output_dir, write_clustered_files
 from paper_grouper.io.report_writer import write_reports
-from paper_grouper.io.graph_visualizer import render_graph_png
-from paper_grouper.core.data import ArticleRecord, ClusteringResult, AutoTuneTrialResult
 
 
-def run_manual(input_dir: str,
-               output_dir: Optional[str],
-               k: int,
-               resolution: float,
-               min_cluster_size: int,
-               rename_with_title: bool) -> Dict[str, Any]:
+def run_manual(
+    input_dir: str,
+    output_dir: Optional[str],
+    k: int,
+    resolution: float,
+    min_cluster_size: int,
+    rename_with_title: bool,
+) -> Dict[str, Any]:
 
     pdfs = list_pdfs(input_dir)
     articles_list = batch_extract(pdfs)
@@ -64,13 +65,15 @@ def run_manual(input_dir: str,
     }
 
 
-def run_auto(input_dir: str,
-             output_dir: Optional[str],
-             k_values: List[int],
-             resolutions: List[float],
-             min_cluster_sizes: List[int],
-             max_workers: int,
-             rename_with_title: bool) -> Dict[str, Any]:
+def run_auto(
+    input_dir: str,
+    output_dir: Optional[str],
+    k_values: List[int],
+    resolutions: List[float],
+    min_cluster_sizes: List[int],
+    max_workers: int,
+    rename_with_title: bool,
+) -> Dict[str, Any]:
 
     pdfs = list_pdfs(input_dir)
     articles_list = batch_extract(pdfs)
