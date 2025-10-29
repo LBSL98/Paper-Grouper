@@ -7,19 +7,31 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Poetry
         run: pipx install poetry
+
       - name: Cache Poetry
         uses: actions/cache@v4
         with:
           path: ~/.cache/pypoetry
           key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-      - name: Install deps
-        run: poetry install --with dev
+
+      - name: Install deps (with dev)
+        run: poetry install --no-interaction --with dev
+
+      - name: Lint (ruff)
+        run: poetry run ruff check .
+
+      - name: Format check (black)
+        run: poetry run black --check .
+
       - name: Run tests
         run: poetry run pytest -q
