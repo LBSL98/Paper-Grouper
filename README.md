@@ -151,9 +151,6 @@ poetry run black --check .
 ---
 
 ## 📸 Captura de tela
-
-*(Adicione uma imagem da interface quando desejar)*
-
 ```
 [ Painel esquerdo: Relatório textual ]
 [ Painel direito: Grafo de similaridade ]
@@ -164,10 +161,11 @@ poetry run black --check .
 ## 📚 Roadmap
 
 * [x] Interface manual com agrupamento e visualização
+* [ ] Deixar ícone de carregar no começo e ícone de onde será salvo no final
 * [ ] Threading para execução sem travar a UI
 * [ ] Extração avançada de metadados (título/abstract)
 * [ ] Geração automática de `.bib` e planilha de resumo
-* [ ] Modo CLI sem interface
+* [ ] Estilizar
 * [ ] Exportação interativa (JSON, CSV, LaTeX)
 
 ---
@@ -176,14 +174,5 @@ poetry run black --check .
 
 Distribuído sob a licença **MIT**.
 Consulte o arquivo [LICENSE](LICENSE) para mais informações.
-
----
-
-## 👥 Equipe & Créditos
-
-**Autor:** Matheus Augusto de Paula Oliveira
-**Versão atual:** `v0.1.0`
-**Instituição:** UTFPR – Engenharia de Computação
-**Contato:** [github.com/LBSL98](https://github.com/LBSL98)
 
 ---
