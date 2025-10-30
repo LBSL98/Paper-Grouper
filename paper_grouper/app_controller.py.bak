@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Dict, List, Sequence
 
 from paper_grouper.core.cluster_postprocess import finalize_clustering
 from paper_grouper.core.community_detector import detect_communities_louvain
@@ -37,7 +37,7 @@ def _check_cancel_or_raise() -> None:
 # -----------------------
 # Wrapper de embedding
 # -----------------------
-def _embed(articles: list[ArticleRecord], *, use_light: bool) -> EmbeddingResult:
+def _embed(articles: List[ArticleRecord], *, use_light: bool) -> EmbeddingResult:
     # Hoje só existe o "light" exposto; mantemos a flag para compatibilidade
     return embed_articles_light(articles)
 
@@ -54,7 +54,7 @@ def run_manual(
     *,
     rename: bool = True,
     use_light: bool = True,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """
     Executa o pipeline manual: scan -> metadados -> embed -> kNN -> Louvain -> pós-processo.
     Retorna dict com chaves estáveis para a UI.
@@ -70,7 +70,7 @@ def run_manual(
         # 2) Metadados (normaliza para dict id->ArticleRecord)
         _check_cancel_or_raise()
         arts_or_dict = batch_extract(pdf_paths)
-        articles_by_id: dict[str, ArticleRecord] = {
+        articles_by_id: Dict[str, ArticleRecord] = {
             a.id: a
             for a in (
                 arts_or_dict.values()
@@ -145,7 +145,7 @@ def run_autotune(
     rename: bool = True,
     use_light: bool = True,
     max_workers: int = 0,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """
     Stub temporário: mantemos a assinatura para não quebrar a UI.
     Implementação completa será feita em issue dedicada.

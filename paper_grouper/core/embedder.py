@@ -1,95 +1,50 @@
-"""
-Embedding interface.
-
-Durante desenvolvimento da UI, carregar sentence-transformers + torch
-pode ficar pesado e travar a janela. Então oferecemos dois modos:
-
-1. embed_articles_light(...)  -> rápido, não usa torch
-   Gera vetores "fake" porém consistentes a partir do texto
-   usando hashing simples. Bom pra testar fluxo.
-
-2. embed_articles_model(...)  -> usa sentence-transformers
-   (usa torch, pesado)
-
-O controller pode chamar um ou outro.
-"""
+# paper_grouper/core/embedder.py
+from __future__ import annotations
 
 import hashlib
-from typing import List
 
 import numpy as np
 
+from ..io.persistence import (
+    load_embedding_from_cache,
+    save_embedding_to_cache,
+)
 from .data import ArticleRecord, EmbeddingResult
 
 
 def _text_to_vec_hash(text: str, dim: int = 64) -> np.ndarray:
     """
-    Gera um vetor fixo baseado em hashing de palavras.
-    Ideia: cada palavra mapeia para um índice pseudo-aleatório no vetor
-    e incrementa aquele índice.
-    Isso NÃO é semântica de verdade, mas mantém artigos com palavras
-    parecidas mais próximos que artigos totalmente diferentes.
+    Vetor leve e determinístico via hashing (para rodar offline, sem modelos pesados).
     """
-    vec = np.zeros(dim, dtype=float)
-    for token in text.lower().split():
-        # hash da palavra -> inteiro grande -> índice [0, dim)
-        h = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
-        idx = h % dim
-        vec[idx] += 1.0
-    # normaliza para evitar que textos longos dominem demais
-    norm = np.linalg.norm(vec)
-    if norm > 0:
-        vec = vec / norm
-    return vec
+    h = hashlib.blake2b(digest_size=32)
+    h.update(text.encode("utf-8", errors="ignore"))
+    raw = h.digest()
+
+    # repete os bytes até preencher 'dim'
+    buf = (raw * ((dim // len(raw)) + 1))[:dim]
+    arr = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
+    arr = arr / max(1.0, float(arr.std() or 1.0))  # normaliza rudimentarmente
+    return arr
 
 
 def embed_articles_light(
-    articles: List[ArticleRecord], dim: int = 64
+    articles: list[ArticleRecord], dim: int = 64
 ) -> EmbeddingResult:
     """
-    Modo leve (sem torch). Útil para desenvolvimento rápido.
+    Gera embeddings leves (hash) para uma lista de ArticleRecord.
+    Usa cache em disco para acelerar reexecuções.
     """
-    vectors = []
-    ids = []
+    ids: list[str] = []
+    vectors: list[np.ndarray] = []
+
     for a in articles:
-        v = _text_to_vec_hash(a.text_repr, dim=dim)
-        vectors.append(v)
         ids.append(a.id)
-    vectors = np.vstack(vectors)
-    return EmbeddingResult(
-        vectors=vectors,
-        article_ids=ids,
-    )
+        cached = load_embedding_from_cache(a.text_repr, dim, "light")
+        if cached is not None:
+            vectors.append(cached)
+            continue
+        v = _text_to_vec_hash(a.text_repr, dim)
+        save_embedding_to_cache(a.text_repr, v, dim, "light")
+        vectors.append(v)
 
-
-# --------- PESADO / REAL (desativado por padrão no controller agora) ----------
-
-_model_cache = None
-
-
-def _get_model():
-    """
-    Carrega sentence-transformers (usa torch). Só chamamos isso
-    em modo 'real'.
-    """
-    global _model_cache
-    if _model_cache is None:
-        from sentence_transformers import SentenceTransformer
-
-        # modelo pequeno mas ainda usa torch
-        _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model_cache
-
-
-def embed_articles_model(articles: List[ArticleRecord]) -> EmbeddingResult:
-    """
-    Modo real, usa embeddings semânticos de verdade.
-    Isso é o que você vai usar mais tarde, mas requer PyTorch.
-    """
-    model = _get_model()
-    texts = [a.text_repr for a in articles]
-    vectors = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-    return EmbeddingResult(
-        vectors=np.asarray(vectors, dtype=float),
-        article_ids=[a.id for a in articles],
-    )
+    return EmbeddingResult(vectors=np.vstack(vectors), article_ids=ids)

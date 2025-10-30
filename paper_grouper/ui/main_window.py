@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 import traceback
+from pathlib import Path
+from typing import Any, Callable
 
-from PySide6.QtCore import Qt
+import shiboken6
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtGui import QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,465 +32,465 @@ from PySide6.QtWidgets import (
 from paper_grouper import app_controller
 
 
-class MainWindow(QMainWindow):
-    """
-    Janela principal do Paper Grouper.
+# -----------------------------------------------------------------------------
+# Worker genérico para rodar em QThread
+# -----------------------------------------------------------------------------
+class Worker(QObject):
+    finished = Signal(dict)
+    error = Signal(str)
+    progressed = Signal(str)
 
-    Metas de usabilidade:
-    - Fluxo mental do usuário: "1) escolho dados, 2) ajusto estratégia, 3) executo, 4) vejo resultado".
-    - Evitar jargão pesado. Onde tem termo técnico (ex: resolução Louvain), explicar.
-    - Mostrar resultado como relatório de leitura, não só log técnico.
-    """
-
-    def __init__(self):
+    def __init__(self, fn: Callable[[], dict[str, Any]]) -> None:
         super().__init__()
-        self.setWindowTitle("Paper Grouper — Agrupamento Automático de Artigos")
-        self.setMinimumSize(1000, 650)
+        self._fn = fn
 
-        #
-        # === ROOT STRUCTURE (main_widget / main_layout) ===
-        #
-        main_widget = QWidget()
-        main_layout = QVBoxLayout()
-        main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
+    @Slot()
+    def run(self) -> None:
+        try:
+            # dica: se o _fn suportar callbacks, injete um callback que cheque interrupção
+            res = self._fn()
+            self.finished.emit(res or {})
+        except Exception:
+            tb = traceback.format_exc()
+            self.error.emit(tb)
+        # sem else: sempre cairá no finally
+        finally:
+            pass  # nada a fazer aqui além da garantia de emitir sinais
 
-        #
-        # === TOP AREA: diretórios + opções gerais ===
-        #
-        top_widget = QWidget()
-        top_layout = QHBoxLayout()
-        top_widget.setLayout(top_layout)
 
-        # Pasta de entrada
+# -----------------------------------------------------------------------------
+# Janela principal
+# -----------------------------------------------------------------------------
+class MainWindow(QMainWindow):
+    def _safe_thread_running(self) -> bool:
+        t = getattr(self, "_thread", None)
+        try:
+            return (t is not None) and shiboken6.isValid(t) and t.isRunning()
+        except Exception:
+            return False
+
+    def _cleanup_qobjects(self) -> None:
+        # encerra e solta referencias com segurança
+        with contextlib.suppress(Exception):
+            t = getattr(self, "_thread", None)
+            if t is not None and shiboken6.isValid(t):
+                t.quit()
+                t.wait(1500)
+        with contextlib.suppress(Exception):
+            w = getattr(self, "_worker", None)
+            if w is not None and shiboken6.isValid(w):
+                w.deleteLater()
+        self._thread = None
+        self._worker = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Paper Grouper")
+        self.setMinimumSize(1050, 640)
+
+        self._last_graph_path: Path | None = None
+        self._thread: QThread | None = None
+
+        root = QWidget(self)
+        self.setCentralWidget(root)
+
+        # Splitter principal: esquerda (form) | direita (preview)
+        splitter = QSplitter(Qt.Horizontal, self)
+
+        # -----------------------
+        # Esquerda: formulário com scroll
+        # -----------------------
+        left_form = QFormLayout()
+        left_form.setLabelAlignment(Qt.AlignRight)
+
+        # Pasta de entrada / saída
         self.input_edit = QLineEdit()
-        self.input_edit.setPlaceholderText("Selecione a pasta com os PDFs de entrada")
-        btn_input = QPushButton("Escolher…")
-        btn_input.clicked.connect(self._choose_input_dir)
+        btn_in = QPushButton("Selecionar...")
+        btn_in.clicked.connect(self._pick_input_dir)
 
-        input_box = QGroupBox("Pasta de entrada")
-        input_box_layout = QHBoxLayout()
-        input_box_layout.addWidget(self.input_edit, stretch=1)
-        input_box_layout.addWidget(btn_input)
-        input_box.setLayout(input_box_layout)
-
-        # Pasta de saída
         self.output_edit = QLineEdit()
-        self.output_edit.setPlaceholderText(
-            "Pasta de saída (opcional). Se vazio, será criada *_grouped"
-        )
-        btn_output = QPushButton("Escolher…")
-        btn_output.clicked.connect(self._choose_output_dir)
+        self.output_edit.setPlaceholderText("Opcional (será criada ao lado da entrada)")
+        btn_out = QPushButton("Selecionar...")
+        btn_out.clicked.connect(self._pick_output_dir)
 
-        output_box = QGroupBox("Pasta de saída")
-        output_box_layout = QHBoxLayout()
-        output_box_layout.addWidget(self.output_edit, stretch=1)
-        output_box_layout.addWidget(btn_output)
-        output_box.setLayout(output_box_layout)
+        row_in = QHBoxLayout()
+        row_in.addWidget(self.input_edit, 1)
+        row_in.addWidget(btn_in)
 
-        # Opções gerais
-        self.rename_checkbox = QCheckBox("Renomear PDFs usando o título detectado")
-        self.rename_checkbox.setChecked(True)
+        row_out = QHBoxLayout()
+        row_out.addWidget(self.output_edit, 1)
+        row_out.addWidget(btn_out)
 
-        general_box = QGroupBox("Opções gerais")
-        general_layout = QVBoxLayout()
-        general_layout.addWidget(self.rename_checkbox)
-        general_box.setLayout(general_layout)
+        left_form.addRow(QLabel("<b>Pasta de entrada:</b>"), self._wrap_row(row_in))
+        left_form.addRow(QLabel("Pasta de saída (opcional):"), self._wrap_row(row_out))
 
-        # Monta a barra superior
-        top_layout.addWidget(input_box, stretch=2)
-        top_layout.addWidget(output_box, stretch=2)
-        top_layout.addWidget(general_box, stretch=1)
-
-        #
-        # === ABA MANUAL ===
-        #
-        manual_tab = QWidget()
-        manual_layout = QVBoxLayout()
-        manual_tab.setLayout(manual_layout)
-
-        manual_form_box = QGroupBox("Configuração Manual")
-        manual_form_layout = QFormLayout()
+        # Parâmetros MANUAIS
+        params_group = QGroupBox("Parâmetros do agrupamento")
+        params_layout = QFormLayout()
 
         self.k_spin = QSpinBox()
-        self.k_spin.setMinimum(1)
-        self.k_spin.setMaximum(100)
+        self.k_spin.setRange(1, 999)
         self.k_spin.setValue(8)
-        self.k_spin.setToolTip(
-            "Número de vizinhos mais próximos usados no grafo de similaridade."
-        )
 
-        self.resolution_spin = QDoubleSpinBox()
-        self.resolution_spin.setDecimals(2)
-        self.resolution_spin.setSingleStep(0.1)
-        self.resolution_spin.setMinimum(0.1)
-        self.resolution_spin.setMaximum(5.0)
-        self.resolution_spin.setValue(1.0)
-        self.resolution_spin.setToolTip(
-            "Resolução do algoritmo de comunidade (Louvain). "
-            "Maior => mais clusters menores."
-        )
+        self.res_spin = QDoubleSpinBox()
+        self.res_spin.setDecimals(3)
+        self.res_spin.setRange(0.01, 10.0)
+        self.res_spin.setSingleStep(0.05)
+        self.res_spin.setValue(1.000)
 
         self.min_cluster_spin = QSpinBox()
-        self.min_cluster_spin.setMinimum(1)
-        self.min_cluster_spin.setMaximum(50)
+        self.min_cluster_spin.setRange(1, 999)
         self.min_cluster_spin.setValue(4)
-        self.min_cluster_spin.setToolTip(
-            "Clusters menores que isso serão anexados ao cluster mais próximo."
-        )
 
-        manual_form_layout.addRow("k-NN (vizinhos por nó):", self.k_spin)
-        manual_form_layout.addRow("Resolução Louvain:", self.resolution_spin)
-        manual_form_layout.addRow("Tamanho mínimo de cluster:", self.min_cluster_spin)
+        self.rename_chk = QCheckBox("Renomear PDFs pelo título extraído")
+        self.rename_chk.setChecked(True)
 
-        manual_form_box.setLayout(manual_form_layout)
+        params_layout.addRow("k (k-NN):", self.k_spin)
+        params_layout.addRow("Resolução (Louvain):", self.res_spin)
+        params_layout.addRow("Tamanho mínimo do cluster:", self.min_cluster_spin)
+        params_layout.addRow(self.rename_chk)
+        params_group.setLayout(params_layout)
 
-        self.btn_run_manual = QPushButton("Executar (Manual)")
-        self.btn_run_manual.setStyleSheet("font-weight: bold;")
-        self.btn_run_manual.clicked.connect(self._run_manual_clicked)
+        # Parâmetros para AUTO-TUNE (listas)
+        autot_group = QGroupBox("Auto-tune (valores separados por vírgula)")
+        autot_layout = QFormLayout()
 
-        manual_layout.addWidget(manual_form_box)
-        manual_layout.addWidget(self.btn_run_manual, alignment=Qt.AlignRight)
-        manual_layout.addStretch()
+        self.k_list_edit = QLineEdit("3,5,8,12")
+        self.res_list_edit = QLineEdit("0.8,1.0,1.2")
+        self.min_list_edit = QLineEdit("3,4,5")
 
-        #
-        # === ABA AUTOMÁTICO (AUTO-TUNE) ===
-        #
-        auto_tab = QWidget()
-        auto_layout = QVBoxLayout()
-        auto_tab.setLayout(auto_layout)
+        autot_layout.addRow("k (lista):", self.k_list_edit)
+        autot_layout.addRow("Resolução (lista):", self.res_list_edit)
+        autot_layout.addRow("Min cluster (lista):", self.min_list_edit)
+        autot_group.setLayout(autot_layout)
 
-        auto_form_box = QGroupBox("Configuração Automática (Auto-Tune)")
-        auto_form_layout = QFormLayout()
+        # Botões
+        btn_manual = QPushButton("Executar (Manual)")
+        btn_manual.clicked.connect(self._on_run_manual)
 
-        self.k_values_edit = QLineEdit()
-        self.k_values_edit.setPlaceholderText("ex: 5,8,10,12")
-        self.k_values_edit.setText("5,8,10,12")
+        btn_auto = QPushButton("Executar (Auto-tune)")
+        btn_auto.clicked.connect(self._on_run_autotune)
 
-        self.resolutions_edit = QLineEdit()
-        self.resolutions_edit.setPlaceholderText("ex: 0.8,1.0,1.2")
-        self.resolutions_edit.setText("0.8,1.0,1.2")
+        buttons_row = QHBoxLayout()
+        buttons_row.addWidget(btn_manual)
+        buttons_row.addWidget(btn_auto)
 
-        self.min_cluster_values_edit = QLineEdit()
-        self.min_cluster_values_edit.setPlaceholderText("ex: 3,4,5")
-        self.min_cluster_values_edit.setText("3,4,5")
+        left_container = QWidget()
+        left_v = QVBoxLayout(left_container)
+        left_v.addLayout(left_form)
+        left_v.addWidget(params_group)
+        left_v.addWidget(autot_group)
+        left_v.addLayout(buttons_row)
+        left_v.addStretch(1)
 
-        self.workers_spin = QSpinBox()
-        self.workers_spin.setMinimum(1)
-        self.workers_spin.setMaximum(32)
-        self.workers_spin.setValue(4)
-        self.workers_spin.setToolTip(
-            "Quantas configurações testar em paralelo no modo automático."
-        )
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_container)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setMinimumWidth(420)
 
-        auto_form_layout.addRow(
-            "Lista de k (separado por vírgula):", self.k_values_edit
-        )
-        auto_form_layout.addRow("Lista de resoluções Louvain:", self.resolutions_edit)
-        auto_form_layout.addRow(
-            "Lista de tamanhos mínimos de cluster:", self.min_cluster_values_edit
-        )
-        auto_form_layout.addRow("Trabalhadores paralelos:", self.workers_spin)
+        splitter.addWidget(left_scroll)
 
-        auto_form_box.setLayout(auto_form_layout)
+        # -----------------------
+        # Direita: preview + abas de texto
+        # -----------------------
+        right_widget = QWidget()
+        right_v = QVBoxLayout(right_widget)
+        right_v.setContentsMargins(0, 0, 0, 0)
 
-        self.btn_run_auto = QPushButton("Executar (Auto)")
-        self.btn_run_auto.setStyleSheet("font-weight: bold;")
-        self.btn_run_auto.clicked.connect(self._run_auto_clicked)
+        self.preview_label = QLabel("Pré-visualização do grafo aparecerá aqui")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setStyleSheet("background-color: #111; color: #BBB;")
+        self.preview_label.setMinimumHeight(380)
 
-        auto_layout.addWidget(auto_form_box)
-        auto_layout.addWidget(self.btn_run_auto, alignment=Qt.AlignRight)
-        auto_layout.addStretch()
-
-        #
-        # === TABS ===
-        #
         tabs = QTabWidget()
-        tabs.addTab(manual_tab, "Manual")
-        tabs.addTab(auto_tab, "Automático")
+        self.summary_edit = QTextEdit()
+        self.summary_edit.setReadOnly(True)
+        self.details_edit = QTextEdit()
+        self.details_edit.setReadOnly(True)
+        tabs.addTab(self.summary_edit, "Resumo")
+        tabs.addTab(self.details_edit, "Detalhes")
 
-        #
-        # === ÁREA DE RESULTADOS: DUAS COLUNAS LADO A LADO ===
-        #
+        right_v.addWidget(self.preview_label, 3)
+        right_v.addWidget(tabs, 2)
 
-        # Caixa da esquerda: relatório em texto
-        report_box = QGroupBox("Relatório")
-        report_layout = QVBoxLayout()
-        self.result_view = QTextEdit()
-        self.result_view.setReadOnly(True)
-        self.result_view.setPlaceholderText(
-            "Aqui você vai ver:\n"
-            "- Caminho da pasta de saída\n"
-            "- Qualidade do agrupamento\n"
-            "- Sugestão de leitura por cluster\n"
-            "- Detalhamento dos clusters\n"
-        )
-        report_layout.addWidget(self.result_view)
-        report_box.setLayout(report_layout)
+        splitter.addWidget(right_widget)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
 
-        # Caixa da direita: visualização do grafo
-        graph_box = QGroupBox("Mapa de Similaridade (clusters)")
-        graph_layout = QVBoxLayout()
+        # Layout principal
+        outer = QVBoxLayout()
+        outer.addWidget(splitter)
+        root.setLayout(outer)
 
-        self.graph_label = QLabel("O grafo aparecerá aqui após a execução.")
-        self.graph_label.setAlignment(Qt.AlignCenter)
+        # Status bar
+        self.statusBar().showMessage("Pronto.")
 
-        self.graph_scroll = QScrollArea()
-        self.graph_scroll.setWidgetResizable(True)
-        self.graph_scroll.setWidget(self.graph_label)
+    def _thread_is_valid(self) -> bool:
+        t = getattr(self, "_thread", None)
+        try:
+            return t is not None and shiboken6.isValid(t) and t.isRunning()
+        except RuntimeError:
+            return False
 
-        graph_layout.addWidget(self.graph_scroll)
-        graph_box.setLayout(graph_layout)
+    def _cleanup_thread(self) -> None:
+        # Desconecta e coleta; tolera objetos já destruídos
+        t = getattr(self, "_thread", None)
+        w = getattr(self, "_worker", None)
+        if w and shiboken6.isValid(w):
+            with contextlib.suppress(Exception):
+                w.finished.disconnect()
+            with contextlib.suppress(Exception):
+                w.error.disconnect()
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(report_box)
-        splitter.addWidget(graph_box)
-        splitter.setSizes([600, 400])
-        splitter.setHandleWidth(6)
-        splitter.setStyleSheet(
-            """
-            QSplitter::handle {
-                background-color: #cccccc;
-            }
-            """
-        )
+        with contextlib.suppress(Exception):
+            if t and shiboken6.isValid(t):
+                t.quit()
+                t.wait(2000)
 
-        #
-        # === MONTAGEM FINAL NO main_layout ===
-        #
-        main_layout.addWidget(top_widget)
-        main_layout.addWidget(tabs)
-        main_layout.addWidget(splitter, stretch=1)
+    # -----------------------
+    # Utilitários de UI
+    # -----------------------
+    @staticmethod
+    def _wrap_row(layout: QHBoxLayout) -> QWidget:
+        w = QWidget()
+        w.setLayout(layout)
+        return w
 
-    # ------------------------------------------------------------------
-    # Helpers de UI
-    # ------------------------------------------------------------------
+    def _pick_input_dir(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "Escolha a pasta com PDFs")
+        if d:
+            self.input_edit.setText(d)
 
-    def _choose_input_dir(self):
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Selecione a pasta com os PDFs de entrada",
-            "",
-        )
-        if path:
-            self.input_edit.setText(path)
+    def _pick_output_dir(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "Escolha a pasta de saída")
+        if d:
+            self.output_edit.setText(d)
 
-    def _choose_output_dir(self):
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "Selecione a pasta onde os clusters serão salvos",
-            "",
-        )
-        if path:
-            self.output_edit.setText(path)
+    def _append_summary(self, text: str) -> None:
+        self.summary_edit.moveCursor(QTextCursor.End)
+        self.summary_edit.insertPlainText(text)
+        self.summary_edit.moveCursor(QTextCursor.End)
 
-    def _append_result(self, text: str):
-        """Mostra texto no painel de resultado de um jeito cumulativo."""
-        self.result_view.append(text)
-        cursor = self.result_view.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        self.result_view.setTextCursor(cursor)
-        self.result_view.ensureCursorVisible()
+    def _append_details(self, text: str) -> None:
+        self.details_edit.moveCursor(QTextCursor.End)
+        self.details_edit.insertPlainText(text)
+        self.details_edit.moveCursor(QTextCursor.End)
 
-    def _clear_result(self):
-        self.result_view.clear()
-        self.graph_label.setText("O grafo aparecerá aqui após a execução.")
-        self.graph_label.setPixmap(QPixmap())
+    def _clear_outputs(self) -> None:
+        self.summary_edit.clear()
+        self.details_edit.clear()
+        self.preview_label.setText("Pré-visualização do grafo aparecerá aqui")
+        self._last_graph_path = None
 
-    # ------------------------------------------------------------------
-    # Execução MANUAL
-    # ------------------------------------------------------------------
+    def _set_graph_preview(self, path: Path) -> None:
+        self._last_graph_path = path
+        pm = QPixmap(str(path))
+        if pm.isNull():
+            self.preview_label.setText(f"Não foi possível carregar a imagem:\n{path}")
+            return
+        self._scale_preview(pm)
 
-    def _run_manual_clicked(self):
-        self._clear_result()
-        self._append_result("Executando agrupamento manual...\n")
+    def resizeEvent(self, e) -> None:  # type: ignore[override]
+        super().resizeEvent(e)
+        if self._last_graph_path and self._last_graph_path.exists():
+            pm = QPixmap(str(self._last_graph_path))
+            if not pm.isNull():
+                self._scale_preview(pm)
 
+    def _scale_preview(self, pix: QPixmap) -> None:
+        lbl = self.preview_label
+        s = lbl.size()
+        scaled = pix.scaled(s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        lbl.setPixmap(scaled)
+
+    # -----------------------
+    # Execuções
+    # -----------------------
+    def _on_run_manual(self) -> None:
         input_dir = self.input_edit.text().strip()
-        output_dir = self.output_edit.text().strip() or None
-        rename_flag = self.rename_checkbox.isChecked()
-
-        k = self.k_spin.value()
-        resolution = self.resolution_spin.value()
-        min_cluster = self.min_cluster_spin.value()
-
         if not input_dir:
-            self._append_result("ERRO: Selecione a pasta de entrada.\n")
+            self.statusBar().showMessage("Selecione a pasta de entrada.")
             return
 
-        try:
-            result = app_controller.run_manual(
+        output_dir = self.output_edit.text().strip() or None
+        k = int(self.k_spin.value())
+        res = float(self.res_spin.value())
+        min_sz = int(self.min_cluster_spin.value())
+        rename = self.rename_chk.isChecked()
+
+        self._clear_outputs()
+        self._append_summary("Executando (manual)...\n")
+        self.statusBar().showMessage("Executando (manual)...")
+
+        def job() -> dict[str, Any]:
+            return app_controller.run_manual(
                 input_dir=input_dir,
                 output_dir=output_dir,
                 k=k,
-                resolution=resolution,
-                min_cluster_size=min_cluster,
-                rename_with_title=rename_flag,
+                resolution=res,
+                min_cluster_size=min_sz,
+                rename=rename,
+                use_light=True,  # embeddings leves por padrão
             )
-            self._render_result(result, mode="manual")
-        except Exception:
-            self._append_result("FALHOU:\n" + traceback.format_exc())
 
-    # ------------------------------------------------------------------
-    # Execução AUTO (autotune)
-    # ------------------------------------------------------------------
+        self._start_worker(job)
 
     def _parse_int_list(self, raw: str) -> list[int]:
-        vals = []
+        vals: list[int] = []
         for chunk in raw.split(","):
-            chunk = chunk.strip()
-            if chunk:
-                vals.append(int(chunk))
+            t = chunk.strip()
+            if not t:
+                continue
+            vals.append(int(t))
         return vals
 
     def _parse_float_list(self, raw: str) -> list[float]:
-        vals = []
+        vals: list[float] = []
         for chunk in raw.split(","):
-            chunk = chunk.strip()
-            if chunk:
-                vals.append(float(chunk))
+            t = chunk.strip()
+            if not t:
+                continue
+            vals.append(float(t))
         return vals
 
-    def _run_auto_clicked(self):
-        self._clear_result()
-        self._append_result("Executando agrupamento automático (auto-tune)...\n")
-
+    def _on_run_autotune(self) -> None:
         input_dir = self.input_edit.text().strip()
-        output_dir = self.output_edit.text().strip() or None
-        rename_flag = self.rename_checkbox.isChecked()
-
         if not input_dir:
-            self._append_result("ERRO: Selecione a pasta de entrada.\n")
+            self.statusBar().showMessage("Selecione a pasta de entrada.")
             return
 
-        try:
-            k_values = self._parse_int_list(self.k_values_edit.text())
-            resolutions = self._parse_float_list(self.resolutions_edit.text())
-            min_cluster_values = self._parse_int_list(
-                self.min_cluster_values_edit.text()
-            )
-            workers = self.workers_spin.value()
+        output_dir = self.output_edit.text().strip() or None
+        rename = self.rename_chk.isChecked()
 
-            result = app_controller.run_auto(
+        try:
+            k_vals = self._parse_int_list(self.k_list_edit.text())
+            r_vals = self._parse_float_list(self.res_list_edit.text())
+            m_vals = self._parse_int_list(self.min_list_edit.text())
+        except ValueError:
+            self.statusBar().showMessage("Listas inválidas no Auto-tune.")
+            return
+
+        if not k_vals or not r_vals or not m_vals:
+            self.statusBar().showMessage("Forneça listas não vazias para o Auto-tune.")
+            return
+
+        self._clear_outputs()
+        self._append_summary("Executando (auto-tune)...\n")
+        self.statusBar().showMessage("Executando (auto-tune)...")
+
+        def job() -> dict[str, Any]:
+            return app_controller.run_autotune(
                 input_dir=input_dir,
                 output_dir=output_dir,
-                k_values=k_values,
-                resolutions=resolutions,
-                min_cluster_sizes=min_cluster_values,
-                max_workers=workers,
-                rename_with_title=rename_flag,
-            )
-            self._render_result(result, mode="auto")
-        except Exception:
-            self._append_result("FALHOU:\n" + traceback.format_exc())
-
-    # ------------------------------------------------------------------
-    # Renderização do resultado na interface
-    # ------------------------------------------------------------------
-
-    def _render_result(self, result_dict: dict, mode: str):
-        """
-        Mostra um relatório amigável:
-        - pasta criada
-        - melhor config (no auto)
-        - score_final
-        - clusters detectados
-        - top artigos de cada cluster
-        - e carrega o grafo no painel da direita
-        """
-        self._clear_result()
-
-        out_dir = result_dict.get("output_root", "<?>")
-        self._append_result(f"Saída gerada em:\n  {out_dir}\n")
-
-        summary = result_dict.get("summary", {})
-        score_final = summary.get("score_final", None)
-        n_clusters = summary.get("n_clusters", None)
-
-        self._append_result("\nQualidade do agrupamento:")
-        self._append_result(f"- Score final: {score_final}")
-        self._append_result(f"- Nº de clusters: {n_clusters}")
-        self._append_result(
-            f"- Fração maior cluster: {summary.get('max_cluster_fraction')}"
-        )
-        self._append_result(f"- Modularity: {summary.get('modularity')}")
-        self._append_result(f"- Balance score: {summary.get('balance_score')}")
-
-        if mode == "auto":
-            best_cfg = result_dict.get("best_cfg", {})
-            self._append_result("\nMelhor configuração encontrada (auto-tune):")
-            self._append_result(f"  k = {best_cfg.get('k')}")
-            self._append_result(f"  resolução = {best_cfg.get('resolution')}")
-            self._append_result(
-                f"  min_cluster_size = {best_cfg.get('min_cluster_size')}"
+                k_values=k_vals,
+                resolution_values=r_vals,
+                min_cluster_values=m_vals,
+                rename=rename,
+                use_light=True,
+                max_workers=0,  # auto
             )
 
-        clustering = result_dict.get("clustering")
-        articles_by_id = result_dict.get("articles", {})
+        self._start_worker(job)
 
-        if clustering:
-            # sugestões de leitura
-            self._append_result("\nSugestão de leitura inicial (por cluster):")
-            for cid, members in clustering.clusters.items():
-                label = clustering.cluster_labels.get(cid, f"cluster_{cid}")
-                ranked = sorted(
-                    members,
-                    key=lambda aid: clustering.centrality.get(aid, 0.0),
-                    reverse=True,
-                )
-                self._append_result(
-                    f"\n▶ {label}  (Cluster {cid}, {len(members)} artigos)"
-                )
-                for aid in ranked[:2]:
-                    art = articles_by_id.get(aid)
-                    if not art:
-                        continue
-                    yr = art.year if art.year is not None else "s/ano"
-                    self._append_result(f"   • {art.title} ({yr})")
+    # -----------------------
+    # Thread helper
+    # -----------------------
+    def _start_worker(self, job: Callable[[], dict[str, Any]]) -> None:
+        # encerra execução anterior, se houver
+        if self._safe_thread_running():
+            self._thread.requestInterruption()
+            self._thread.quit()
+            self._thread.wait(5_000)  # até 5s
 
-            # listagem detalhada
-            self._append_result("\nDetalhamento dos clusters:")
-            for cid, members in clustering.clusters.items():
-                label = clustering.cluster_labels.get(cid, f"cluster_{cid}")
-                self._append_result(
-                    f"\n▶ Cluster {cid} :: {label} (size={len(members)})"
-                )
-                ranked = sorted(
-                    members,
-                    key=lambda aid: clustering.centrality.get(aid, 0.0),
-                    reverse=True,
-                )
-                for aid in ranked[:5]:
-                    art = articles_by_id.get(aid)
-                    if not art:
-                        continue
-                    yr = art.year if art.year is not None else "s/ano"
-                    self._append_result(f"  - {art.title} ({yr}) [{aid}]")
+        self._thread = QThread(self)
+        self._worker = Worker(job)
+        self._worker.moveToThread(self._thread)
 
-        # carregar imagem do grafo
-        graph_path = result_dict.get("graph_png")
-        if graph_path:
-            pix = QPixmap(graph_path)
-            if not pix.isNull():
-                scaled = pix.scaledToWidth(600, Qt.SmoothTransformation)
-                self.graph_label.setPixmap(scaled)
-                self.graph_label.setText("")
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_worker_finished)
+        self._worker.error.connect(self._on_worker_failed)
+        self._worker.finished.connect(self._cleanup_qobjects)
+        self._worker.error.connect(self._cleanup_qobjects)
+        self._worker.error.connect(self._thread.quit)
+        self._worker.error.connect(self._worker.deleteLater)
+        self._worker.progressed.connect(lambda s: self._append_summary(s + "\n"))
+
+        # limpeza correta
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._worker.finished.connect(self._cleanup_thread)
+        self._worker.error.connect(self._cleanup_thread)
+
+        self._thread.start()
+
+    # -----------------------
+    # Handlers de retorno
+    # -----------------------
+    def _on_worker_finished(self, result: dict[str, Any]) -> None:
+        self.statusBar().showMessage("Concluído.")
+        try:
+            # Resumo
+            summary = result.get("summary", {})
+            lines: list[str] = []
+            if summary:
+                lines.append("Qualidade do agrupamento:")
+                lines.append(f"- Score final: {summary.get('score_final')}")
+                lines.append(f"- Nº de clusters: {summary.get('n_clusters')}")
+                lines.append(
+                    f"- Fração maior cluster: {summary.get('max_cluster_fraction')}"
+                )
+                lines.append(f"- Modularity: {summary.get('modularity')}")
+                lines.append(f"- Balance score: {summary.get('balance_score')}")
+                lines.append("")
+            out_dir = result.get("output_root")
+            if out_dir:
+                lines.append(f"Saída gerada em:\n  {out_dir}\n")
+
+            self._append_summary("\n".join(lines) + "\n")
+
+            # Detalhes (debug) — imprime o dicionário quase todo
+            debug_keys = [
+                "articles",
+                "clustering",
+                "autotune_trials",
+                "output_root",
+                "graph_png",
+                "summary",
+            ]
+            dbg = {k: result.get(k) for k in debug_keys}
+            self._append_details("Detalhes completos (debug):\n")
+            self._append_details(repr(dbg) + "\n")
+
+            # Preview do grafo
+            graph_png = result.get("graph_png")
+            if graph_png:
+                self._set_graph_preview(Path(graph_png))
             else:
-                self.graph_label.setText("Não consegui carregar a imagem do grafo.")
-        else:
-            self.graph_label.setText("Nenhuma imagem de grafo gerada.")
+                self._append_summary("Aviso: nenhuma imagem de grafo foi fornecida.\n")
 
-        # dump técnico (debug)
-        self._append_result("\n---\nDetalhes completos (debug):")
-        import pprint
+        except Exception:
+            self._append_summary("Falha ao processar resultado.\n")
+            self._append_details(traceback.format_exc())
 
-        self._append_result(pprint.pformat(result_dict, width=100))
+    def _on_worker_failed(self, message: str) -> None:
+        self.statusBar().showMessage("Falha.")
+        self._append_summary("Erro durante a execução:\n")
+        self._append_summary(message + "\n")
+
+    def closeEvent(self, event):
+        # tenta encerrar trabalhador/threads ativos sem explodir
+        self._cleanup_qobjects()
+        super().closeEvent(event)
 
 
-def main():
-    app = QApplication([])
+def main() -> None:
+    import sys
+
+    app = QApplication(sys.argv)
     win = MainWindow()
     win.show()
-    app.exec()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

@@ -38,3 +38,7 @@ addopts = "-q"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+paper-grouper = "paper_grouper.app_entry:main"
+paper-grouper-cli = "paper_grouper.app_controller:cli_main"
