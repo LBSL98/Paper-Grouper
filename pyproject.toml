@@ -27,10 +27,19 @@ types-setuptools = "^75.8.2.20250305"
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["Teste-Matheus"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+
+[tool.black]
+line-length = 100
+force-exclude = '''
+(^/Teste-Matheus/)
+'''
 
 [tool.pytest.ini_options]
 addopts = "-q"
