@@ -43,9 +43,7 @@ def _text_to_vec_hash(text: str, dim: int = 64) -> np.ndarray:
     return vec
 
 
-def embed_articles_light(
-    articles: List[ArticleRecord], dim: int = 64
-) -> EmbeddingResult:
+def embed_articles_light(articles: List[ArticleRecord], dim: int = 64) -> EmbeddingResult:
     """
     Modo leve (sem torch). Útil para desenvolvimento rápido.
     """

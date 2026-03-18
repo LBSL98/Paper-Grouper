@@ -48,9 +48,7 @@ def _merge_tiny_clusters(
     return new_assign
 
 
-def _compute_centrality(
-    G: nx.Graph, clusters: Dict[int, List[str]]
-) -> Dict[str, float]:
+def _compute_centrality(G: nx.Graph, clusters: Dict[int, List[str]]) -> Dict[str, float]:
     centrality: Dict[str, float] = {}
     for _cid, members in clusters.items():
         member_set = set(members)
@@ -63,9 +61,7 @@ def _compute_centrality(
     return centrality
 
 
-def _label_cluster(
-    cid: int, members: List[str], by_id: Dict[str, ArticleRecord]
-) -> str:
+def _label_cluster(cid: int, members: List[str], by_id: Dict[str, ArticleRecord]) -> str:
     bag = []
     for art_id in members:
         a = by_id[art_id]

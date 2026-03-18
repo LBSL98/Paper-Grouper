@@ -62,9 +62,7 @@ def run_autotune(
 
     results = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as pool:
-        futs = [
-            pool.submit(_evaluate_single_config, cfg, articles, emb) for cfg in configs
-        ]
+        futs = [pool.submit(_evaluate_single_config, cfg, articles, emb) for cfg in configs]
         for fut in concurrent.futures.as_completed(futs):
             results.append(fut.result())
 

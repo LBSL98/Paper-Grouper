@@ -112,9 +112,7 @@ class MainWindow(QMainWindow):
         self.k_spin.setMinimum(1)
         self.k_spin.setMaximum(100)
         self.k_spin.setValue(8)
-        self.k_spin.setToolTip(
-            "Número de vizinhos mais próximos usados no grafo de similaridade."
-        )
+        self.k_spin.setToolTip("Número de vizinhos mais próximos usados no grafo de similaridade.")
 
         self.resolution_spin = QDoubleSpinBox()
         self.resolution_spin.setDecimals(2)
@@ -123,8 +121,7 @@ class MainWindow(QMainWindow):
         self.resolution_spin.setMaximum(5.0)
         self.resolution_spin.setValue(1.0)
         self.resolution_spin.setToolTip(
-            "Resolução do algoritmo de comunidade (Louvain). "
-            "Maior => mais clusters menores."
+            "Resolução do algoritmo de comunidade (Louvain). " "Maior => mais clusters menores."
         )
 
         self.min_cluster_spin = QSpinBox()
@@ -175,13 +172,9 @@ class MainWindow(QMainWindow):
         self.workers_spin.setMinimum(1)
         self.workers_spin.setMaximum(32)
         self.workers_spin.setValue(4)
-        self.workers_spin.setToolTip(
-            "Quantas configurações testar em paralelo no modo automático."
-        )
+        self.workers_spin.setToolTip("Quantas configurações testar em paralelo no modo automático.")
 
-        auto_form_layout.addRow(
-            "Lista de k (separado por vírgula):", self.k_values_edit
-        )
+        auto_form_layout.addRow("Lista de k (separado por vírgula):", self.k_values_edit)
         auto_form_layout.addRow("Lista de resoluções Louvain:", self.resolutions_edit)
         auto_form_layout.addRow(
             "Lista de tamanhos mínimos de cluster:", self.min_cluster_values_edit
@@ -361,9 +354,7 @@ class MainWindow(QMainWindow):
         try:
             k_values = self._parse_int_list(self.k_values_edit.text())
             resolutions = self._parse_float_list(self.resolutions_edit.text())
-            min_cluster_values = self._parse_int_list(
-                self.min_cluster_values_edit.text()
-            )
+            min_cluster_values = self._parse_int_list(self.min_cluster_values_edit.text())
             workers = self.workers_spin.value()
 
             result = app_controller.run_auto(
@@ -405,9 +396,7 @@ class MainWindow(QMainWindow):
         self._append_result("\nQualidade do agrupamento:")
         self._append_result(f"- Score final: {score_final}")
         self._append_result(f"- Nº de clusters: {n_clusters}")
-        self._append_result(
-            f"- Fração maior cluster: {summary.get('max_cluster_fraction')}"
-        )
+        self._append_result(f"- Fração maior cluster: {summary.get('max_cluster_fraction')}")
         self._append_result(f"- Modularity: {summary.get('modularity')}")
         self._append_result(f"- Balance score: {summary.get('balance_score')}")
 
@@ -416,9 +405,7 @@ class MainWindow(QMainWindow):
             self._append_result("\nMelhor configuração encontrada (auto-tune):")
             self._append_result(f"  k = {best_cfg.get('k')}")
             self._append_result(f"  resolução = {best_cfg.get('resolution')}")
-            self._append_result(
-                f"  min_cluster_size = {best_cfg.get('min_cluster_size')}"
-            )
+            self._append_result(f"  min_cluster_size = {best_cfg.get('min_cluster_size')}")
 
         clustering = result_dict.get("clustering")
         articles_by_id = result_dict.get("articles", {})
@@ -433,9 +420,7 @@ class MainWindow(QMainWindow):
                     key=lambda aid: clustering.centrality.get(aid, 0.0),
                     reverse=True,
                 )
-                self._append_result(
-                    f"\n▶ {label}  (Cluster {cid}, {len(members)} artigos)"
-                )
+                self._append_result(f"\n▶ {label}  (Cluster {cid}, {len(members)} artigos)")
                 for aid in ranked[:2]:
                     art = articles_by_id.get(aid)
                     if not art:
@@ -447,9 +432,7 @@ class MainWindow(QMainWindow):
             self._append_result("\nDetalhamento dos clusters:")
             for cid, members in clustering.clusters.items():
                 label = clustering.cluster_labels.get(cid, f"cluster_{cid}")
-                self._append_result(
-                    f"\n▶ Cluster {cid} :: {label} (size={len(members)})"
-                )
+                self._append_result(f"\n▶ Cluster {cid} :: {label} (size={len(members)})")
                 ranked = sorted(
                     members,
                     key=lambda aid: clustering.centrality.get(aid, 0.0),
